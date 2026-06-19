@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Merchant {
+  id           String         @id @default(uuid())
+  shop         String         @unique
+  licenseKey   String?
+  autoUpdate   Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  installations Installation[]
+}
+
+model Section {
+  id             String         @id
+  name           String
+  handle         String         @unique
+  category       String
+  description    String
+  previewUrl     String?
+  isPopular      Boolean        @default(false)
+  isNew          Boolean        @default(false)
+  price          Float          @default(0.00)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  versions       Version[]
+  installations  Installation[]
+}
+
+model Version {
+  id            String         @id @default(uuid())
+  sectionId     String
+  section       Section        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  versionNumber String
+  liquidCode    String
+  cssCode       String
+  jsCode        String
+  changelog     String?
+  createdAt     DateTime       @default(now())
+}
+
+model Installation {
+  id               String   @id @default(uuid())
+  shop             String
+  merchantId       String
+  merchant         Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  themeId          String
+  sectionId        String
+  section          Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  installedVersion String
+  status           String   @default("active")
+  installedAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([shop, themeId, sectionId])
+}
