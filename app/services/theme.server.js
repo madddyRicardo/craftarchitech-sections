@@ -4,12 +4,26 @@
 
 const API_VERSION = "2026-04";
 
+// In-memory cache for active theme ID and app embed status to optimize performance
+const themeIdCache = new Map(); // key: shop, value: { id: string, expiresAt: number }
+const embedStatusCache = new Map(); // key: shop, value: { enabled: boolean, expiresAt: number }
+
+const THEME_ID_TTL = 5 * 60 * 1000; // 5 minutes
+const EMBED_STATUS_TTL = 15 * 1000; // 15 seconds
+
 /**
  * Get the active theme ID for a shop
  * @param {Object} session - The authenticated Shopify session
  * @returns {Promise<string>} - The active theme ID
  */
 export async function getActiveThemeId(session) {
+  const shop = session.shop;
+  const cached = themeIdCache.get(shop);
+  if (cached && cached.expiresAt > Date.now()) {
+    console.log(`[Theme API] Using cached theme ID for ${shop}: ${cached.id}`);
+    return cached.id;
+  }
+
   const url = `https://${session.shop}/admin/api/${API_VERSION}/themes.json`;
   
   console.log(`[Theme API] Fetching themes for shop: ${session.shop} using scopes: ${session.scope}`);
@@ -29,16 +43,21 @@ export async function getActiveThemeId(session) {
   }
 
   const data = await response.json();
-  console.log(`[Theme API] Loaded ${data.themes?.length} themes:`, JSON.stringify(data.themes));
-  
   const activeTheme = data.themes.find((theme) => theme.role === "main");
 
   if (!activeTheme) {
     throw new Error("No active theme found for this shop.");
   }
 
-  console.log(`[Theme API] Found active theme ID: ${activeTheme.id} (${activeTheme.name})`);
-  return activeTheme.id.toString();
+  const themeId = activeTheme.id.toString();
+  console.log(`[Theme API] Found active theme ID: ${themeId} (${activeTheme.name})`);
+  
+  themeIdCache.set(shop, {
+    id: themeId,
+    expiresAt: Date.now() + THEME_ID_TTL,
+  });
+
+  return themeId;
 }
 
 /**
@@ -114,6 +133,12 @@ export async function deleteThemeAsset(session, themeId, key) {
  * @returns {Promise<boolean>} - True if enabled, false if disabled or not found
  */
 export async function isAppEmbedEnabled(session) {
+  const shop = session.shop;
+  const cached = embedStatusCache.get(shop);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.enabled;
+  }
+
   try {
     const themeId = await getActiveThemeId(session);
     const url = `https://${session.shop}/admin/api/${API_VERSION}/themes/${themeId}/assets.json?asset[key]=config/settings_data.json`;
@@ -139,14 +164,21 @@ export async function isAppEmbedEnabled(session) {
     const settings = JSON.parse(data.asset.value);
     const blocks = settings.current?.blocks || {};
     
+    let enabled = false;
     // Look for a block with our app embed type and check if it is NOT disabled
     for (const block of Object.values(blocks)) {
       if (block.type && block.type.includes("shopify://apps/") && block.type.includes("/blocks/app-embed")) {
-        return block.disabled === false;
+        enabled = block.disabled === false;
+        break;
       }
     }
     
-    return false;
+    embedStatusCache.set(shop, {
+      enabled,
+      expiresAt: Date.now() + EMBED_STATUS_TTL,
+    });
+
+    return enabled;
   } catch (error) {
     console.error("[Theme API] Error checking app embed status:", error);
     return false;
