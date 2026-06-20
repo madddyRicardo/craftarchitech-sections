@@ -1,5 +1,5 @@
-import React from "react";
-import { Card, Text, Button, Badge, Box, BlockStack, InlineStack } from "@shopify/polaris";
+import React, { useState } from "react";
+import { Card, Text, Button, Badge, Box, BlockStack, InlineStack, TextField } from "@shopify/polaris";
 
 /**
  * SectionCard Component
@@ -10,7 +10,9 @@ import { Card, Text, Button, Badge, Box, BlockStack, InlineStack } from "@shopif
  * @param {boolean} props.isInstalled - Whether the section is installed
  * @param {boolean} props.hasUpdate - Whether a new version is available
  * @param {string} props.installedVersion - The version currently installed
+ * @param {boolean} props.isUnlocked - Whether the section is unlocked/purchased
  * @param {Function} props.onInstall - Handler for installation
+ * @param {Function} props.onActivate - Handler for section activation
  * @param {Function} props.onUpdate - Handler for updates
  * @param {Function} props.onUninstall - Handler for removal
  * @param {Function} props.onPreview - Handler for triggering live preview
@@ -21,12 +23,23 @@ export default function SectionCard({
   isInstalled,
   hasUpdate,
   installedVersion,
+  isUnlocked = true,
   onInstall,
+  onActivate,
   onUpdate,
   onUninstall,
   onPreview,
   isActionLoading = false,
 }) {
+  const [activationKey, setActivationKey] = useState("");
+  const [showActivationInput, setShowActivationInput] = useState(false);
+
+  const handleActivateSubmit = () => {
+    if (activationKey.trim()) {
+      onActivate(activationKey.trim());
+    }
+  };
+
   return (
     <Card roundedAbove="sm">
       <BlockStack gap="400">
@@ -143,43 +156,79 @@ export default function SectionCard({
         )}
 
         {/* Action Buttons */}
-        <InlineStack gap="200" align="space-between">
-          <Button onClick={onPreview} variant="secondary">
-            Live Preview
-          </Button>
-
-          <InlineStack gap="100">
-            {isInstalled ? (
-              <>
-                {hasUpdate && (
-                  <Button
-                    onClick={onUpdate}
-                    variant="primary"
-                    loading={isActionLoading}
-                  >
-                    Update
-                  </Button>
-                )}
-                <Button
-                  onClick={onUninstall}
-                  tone="critical"
-                  variant="secondary"
-                  loading={isActionLoading}
-                >
-                  Remove
-                </Button>
-              </>
-            ) : (
+        {showActivationInput && !isInstalled && !isUnlocked ? (
+          <BlockStack gap="200">
+            <TextField
+              label="Enter Section License Key"
+              value={activationKey}
+              onChange={setActivationKey}
+              placeholder="CRAFT-XXXX-XXXX-XXXX"
+              autoComplete="off"
+              disabled={isActionLoading}
+            />
+            <InlineStack gap="200">
               <Button
-                onClick={onInstall}
                 variant="primary"
+                onClick={handleActivateSubmit}
                 loading={isActionLoading}
               >
-                1-Click Install
+                Activate Section
               </Button>
-            )}
+              <Button
+                variant="secondary"
+                onClick={() => setShowActivationInput(false)}
+                disabled={isActionLoading}
+              >
+                Cancel
+              </Button>
+            </InlineStack>
+          </BlockStack>
+        ) : (
+          <InlineStack gap="200" align="space-between">
+            <Button onClick={onPreview} variant="secondary">
+              Live Preview
+            </Button>
+
+            <InlineStack gap="100">
+              {isInstalled ? (
+                <>
+                  {hasUpdate && (
+                    <Button
+                      onClick={onUpdate}
+                      variant="primary"
+                      loading={isActionLoading}
+                    >
+                      Update
+                    </Button>
+                  )}
+                  <Button
+                    onClick={onUninstall}
+                    tone="critical"
+                    variant="secondary"
+                    loading={isActionLoading}
+                  >
+                    Remove
+                  </Button>
+                </>
+              ) : !isUnlocked ? (
+                <Button
+                  onClick={() => setShowActivationInput(true)}
+                  variant="primary"
+                >
+                  Unlock Section
+                </Button>
+              ) : (
+                <Button
+                  onClick={onInstall}
+                  variant="primary"
+                  loading={isActionLoading}
+                >
+                  1-Click Install
+                </Button>
+              )}
+            </InlineStack>
           </InlineStack>
-        </InlineStack>
+        )}
       </BlockStack>
     </Card>
   );

@@ -84,6 +84,11 @@ export const loader = async ({ request }) => {
     },
   });
 
+  // Load all license keys from DB
+  const licenses = await prisma.license.findMany({
+    orderBy: { createdAt: "desc" },
+  });
+
   return {
     stats: {
       sections: totalSectionsCount,
@@ -104,6 +109,17 @@ export const loader = async ({ request }) => {
       jsCode: s.versions[0]?.jsCode || "",
       description: s.description || "",
       previewUrl: s.previewUrl || "",
+    })),
+    licensesList: licenses.map((l) => ({
+      id: l.id,
+      key: l.key,
+      price: l.price,
+      type: l.type,
+      sectionId: l.sectionId,
+      status: l.status,
+      shop: l.shop || "Unused",
+      createdAt: l.createdAt.toLocaleDateString(),
+      activatedAt: l.activatedAt ? l.activatedAt.toLocaleDateString() : null,
     })),
   };
 };
@@ -281,6 +297,47 @@ export const action = async ({ request }) => {
       return { success: true, message: `Section '${name}' updated successfully!` };
     }
 
+    if (actionType === "generate_license") {
+      const type = formData.get("type") || "app";
+      const sectionId = formData.get("sectionId") || null;
+      const price = parseFloat(formData.get("price")) || (type === "app" ? 29.00 : 10.00);
+
+      const generateRandomLicenseKey = () => {
+        return `CRAFT-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      };
+
+      const newKey = generateRandomLicenseKey();
+
+      await prisma.license.create({
+        data: {
+          key: newKey,
+          type,
+          sectionId,
+          price,
+          status: "active",
+        },
+      });
+
+      return { success: true, message: `License key '${newKey}' generated successfully!` };
+    }
+
+    if (actionType === "revoke_license") {
+      const licenseId = formData.get("licenseId");
+      await prisma.license.update({
+        where: { id: licenseId },
+        data: { status: "revoked" },
+      });
+      return { success: true, message: "License key revoked successfully." };
+    }
+
+    if (actionType === "delete_license") {
+      const licenseId = formData.get("licenseId");
+      await prisma.license.delete({
+        where: { id: licenseId },
+      });
+      return { success: true, message: "License key deleted from system." };
+    }
+
     return { success: false, error: "Unsupported action." };
   } catch (error) {
     console.error("Super Admin Action error:", error);
@@ -289,9 +346,47 @@ export const action = async ({ request }) => {
 };
 
 export default function SuperAdmin() {
-  const { stats, sectionsList } = useLoaderData();
+  const { stats, sectionsList, licensesList = [] } = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
+
+  // License Generator State
+  const [genLicType, setGenLicType] = useState("app");
+  const [genLicSectionId, setGenLicSectionId] = useState("");
+  const [genLicPrice, setGenLicPrice] = useState("29.00");
+
+  const handleLicTypeChange = (value) => {
+    setGenLicType(value);
+    setGenLicPrice(value === "app" ? "29.00" : "10.00");
+  };
+
+  const handleGenerateLicense = () => {
+    fetcher.submit(
+      {
+        actionType: "generate_license",
+        type: genLicType,
+        sectionId: genLicSectionId,
+        price: genLicPrice,
+      },
+      { method: "POST" }
+    );
+  };
+
+  const handleRevokeLicense = (licenseId) => {
+    fetcher.submit(
+      { actionType: "revoke_license", licenseId },
+      { method: "POST" }
+    );
+  };
+
+  const handleDeleteLicense = (licenseId) => {
+    if (confirm("Are you sure you want to delete this license key?")) {
+      fetcher.submit(
+        { actionType: "delete_license", licenseId },
+        { method: "POST" }
+      );
+    }
+  };
 
   // Authentication State
   const [passkeyInput, setPasskeyInput] = useState("");
@@ -395,7 +490,8 @@ export default function SuperAdmin() {
       if (fetcher.data.success) {
         shopify.toast.show(fetcher.data.message);
         // Clear forms on success
-        if (fetcher.formData.get("actionType") === "create_section") {
+        const actionType = fetcher.formData?.get("actionType");
+        if (actionType === "create_section") {
           setNewSecId("");
           setNewSecName("");
           setNewSecHandle("");
@@ -405,20 +501,23 @@ export default function SuperAdmin() {
           setNewSecLiquid("");
           setNewSecCss("");
           setNewSecJs("");
-        } else if (fetcher.formData.get("actionType") === "release_version") {
+        } else if (actionType === "release_version") {
           setRelVerNum("");
           setRelLiquid("");
           setRelCss("");
           setRelJs("");
           setRelChangelog("");
-        } else if (fetcher.formData.get("actionType") === "update_section") {
+        } else if (actionType === "update_section") {
           setEditingSection(null);
+        } else if (actionType === "generate_license") {
+          setGenLicSectionId("");
+          setGenLicPrice(genLicType === "app" ? "29.00" : "10.00");
         }
       } else if (fetcher.data.error) {
         shopify.toast.show(fetcher.data.error, { isError: true });
       }
     }
-  }, [fetcher.data, shopify]);
+  }, [fetcher.data, shopify, genLicType]);
 
   const handleCreateSectionSubmit = () => {
     if (!newSecLiquid) {
@@ -646,6 +745,155 @@ export default function SuperAdmin() {
               </IndexTable.Row>
             ))}
           </IndexTable>
+        </Card>
+
+        {/* License Key Manager Section */}
+        <Card padding="0">
+          <Box padding="400">
+            <BlockStack gap="400">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text variant="headingMd" as="h3">
+                  License Key Manager
+                </Text>
+              </InlineStack>
+              
+              {/* Generate License Form */}
+              <Box padding="400" background="bg-surface-secondary" borderRadius="200" borderStyle="dashed" borderWidth="025" borderColor="border">
+                <Grid>
+                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3 }}>
+                    <Select
+                      label="Key Type"
+                      options={[
+                        { label: "App Activation ($29)", value: "app" },
+                        { label: "Section Activation ($10)", value: "section" },
+                      ]}
+                      onChange={handleLicTypeChange}
+                      value={genLicType}
+                    />
+                  </Grid.Cell>
+                  
+                  {genLicType === "section" && (
+                    <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4 }}>
+                      <Select
+                        label="Target Section"
+                        options={[
+                          { label: "Select Section...", value: "" },
+                          ...sectionsList.map((s) => ({ label: s.name, value: s.id })),
+                        ]}
+                        onChange={setGenLicSectionId}
+                        value={genLicSectionId}
+                      />
+                    </Grid.Cell>
+                  )}
+                  
+                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 2 }}>
+                    <TextField
+                      label="Price ($)"
+                      type="number"
+                      value={genLicPrice}
+                      onChange={setGenLicPrice}
+                      autoComplete="off"
+                    />
+                  </Grid.Cell>
+                  
+                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3 }}>
+                    <div style={{ marginTop: "24px" }}>
+                      <Button
+                        variant="primary"
+                        onClick={handleGenerateLicense}
+                        loading={isActionLoading && fetcher.formData?.get("actionType") === "generate_license"}
+                        disabled={isActionLoading || (genLicType === "section" && !genLicSectionId)}
+                      >
+                        Generate License Key
+                      </Button>
+                    </div>
+                  </Grid.Cell>
+                </Grid>
+              </Box>
+
+              {/* License Keys Table */}
+              {licensesList.length === 0 ? (
+                <Box padding="400" textAlign="center">
+                  <Text variant="bodyMd" tone="subdued">
+                    No license keys generated yet. Use the tool above to generate one.
+                  </Text>
+                </Box>
+              ) : (
+                <IndexTable
+                  resourceName={{ singular: "license", plural: "licenses" }}
+                  itemCount={licensesList.length}
+                  headings={[
+                    { title: "License Key" },
+                    { title: "Type" },
+                    { title: "Target Section" },
+                    { title: "Price" },
+                    { title: "Shop Domain" },
+                    { title: "Status" },
+                    { title: "Created / Activated" },
+                    { title: "Actions", alignment: "right" },
+                  ]}
+                  selectable={false}
+                >
+                  {licensesList.map((l, idx) => {
+                    const targetSec = sectionsList.find((s) => s.id === l.sectionId);
+                    return (
+                      <IndexTable.Row id={l.id} key={l.id} position={idx}>
+                        <IndexTable.Cell>
+                          <Text variant="bodyMd" fontWeight="bold" tone="success">
+                            {l.key}
+                          </Text>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Badge tone={l.type === "app" ? "info" : "attention"}>
+                            {l.type === "app" ? "App" : "Section"}
+                          </Badge>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          {l.type === "section" ? (targetSec?.name || l.sectionId || "Unknown") : "N/A"}
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>${l.price.toFixed(2)}</IndexTable.Cell>
+                        <IndexTable.Cell>{l.shop}</IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Badge tone={l.status === "active" ? "success" : "critical"}>
+                            {l.status}
+                          </Badge>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <BlockStack>
+                            <Text variant="bodyXs" tone="subdued">Gen: {l.createdAt}</Text>
+                            {l.activatedAt && <Text variant="bodyXs" tone="subdued">Act: {l.activatedAt}</Text>}
+                          </BlockStack>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <InlineStack align="end" gap="200">
+                            {l.status === "active" && (
+                              <Button
+                                variant="secondary"
+                                onClick={() => handleRevokeLicense(l.id)}
+                                loading={isActionLoading && fetcher.formData?.get("actionType") === "revoke_license" && fetcher.formData?.get("licenseId") === l.id}
+                                disabled={isActionLoading && !(fetcher.formData?.get("actionType") === "revoke_license" && fetcher.formData?.get("licenseId") === l.id)}
+                              >
+                                Revoke
+                              </Button>
+                            )}
+                            <Button
+                              variant="secondary"
+                              tone="critical"
+                              onClick={() => handleDeleteLicense(l.id)}
+                              loading={isActionLoading && fetcher.formData?.get("actionType") === "delete_license" && fetcher.formData?.get("licenseId") === l.id}
+                              disabled={isActionLoading && !(fetcher.formData?.get("actionType") === "delete_license" && fetcher.formData?.get("licenseId") === l.id)}
+                            >
+                              Delete
+                            </Button>
+                          </InlineStack>
+                        </IndexTable.Cell>
+                      </IndexTable.Row>
+                    );
+                  })}
+                </IndexTable>
+              )}
+            </BlockStack>
+          </Box>
         </Card>
 
         {/* CRUD Creation Panel */}

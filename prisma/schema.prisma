@@ -86,3 +86,15 @@ model Installation {
 
   @@unique([shop, themeId, sectionId])
 }
+
+model License {
+  id           String    @id @default(uuid())
+  key          String    @unique
+  price        Float     @default(29.00)
+  type         String    @default("app") // "app" or "section"
+  sectionId    String?   // If type is "section", which section this key unlocks
+  status       String    @default("active") // "active" or "revoked"
+  shop         String?   // The shop domain that activated this key
+  createdAt    DateTime  @default(now())
+  activatedAt  DateTime?
+}

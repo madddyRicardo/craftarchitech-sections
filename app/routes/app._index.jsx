@@ -28,22 +28,8 @@ import { seedSections } from "../services/sections.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
 export const loader = async ({ request }) => {
-  const { session, billing } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
-
-  // Check if user has active charge for One-time Activation
-  const billingCheck = await billing.check({
-    plans: ["One-time Activation"],
-    isTest: true,
-  });
-  
-  if (!billingCheck.hasActivePayment) {
-    return await billing.request({
-      plan: "One-time Activation",
-      isTest: true,
-      returnUrl: `https://${session.shop}/admin/apps/craftarchitech-sections-1/app`,
-    });
-  }
 
   // Auto-seed the library sections on load to guarantee library data exists
   await seedSections();

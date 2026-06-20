@@ -22,7 +22,7 @@ import SectionCard from "../components/SectionCard";
 import PreviewModal from "../components/PreviewModal";
 
 export const loader = async ({ request }) => {
-  const { session, billing } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
   // Retrieve the library sections and installed logs
@@ -31,41 +31,31 @@ export const loader = async ({ request }) => {
     where: { shop },
   });
 
-  // Check for auto-installation redirect from Shopify Billing
+  // Get active section license keys for this shop domain
+  const shopLicenses = await prisma.license.findMany({
+    where: {
+      shop,
+      status: "active",
+    },
+  });
+
+  const unlockedSectionIds = new Set(
+    shopLicenses
+      .filter((l) => l.type === "section" && l.sectionId)
+      .map((l) => l.sectionId)
+  );
+
+  const mappedLibrarySections = librarySections.map((s) => ({
+    ...s,
+    isUnlocked: s.price === 0 || unlockedSectionIds.has(s.id),
+  }));
+
   const url = new URL(request.url);
-  const installedSectionId = url.searchParams.get("installed_section_id");
-
-  if (installedSectionId) {
-    const section = await prisma.section.findUnique({
-      where: { id: installedSectionId },
-    });
-
-    if (section) {
-      let canInstall = true;
-      if (section.price > 0) {
-        const billingCheck = await billing.check({
-          plans: ["Premium Section"],
-          isTest: true,
-        });
-        canInstall = billingCheck.hasActivePayment;
-      }
-
-      if (canInstall) {
-        try {
-          await installSection(session, installedSectionId);
-          return redirect(`/app/library?installed_success=true`);
-        } catch (e) {
-          console.error("Auto install error:", e);
-        }
-      }
-    }
-  }
-
   const installedSuccess = url.searchParams.get("installed_success") === "true";
 
   return {
     shop,
-    librarySections,
+    librarySections: mappedLibrarySections,
     installations: installations.map((inst) => ({
       id: inst.id,
       sectionId: inst.sectionId,
@@ -77,7 +67,8 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session, billing } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
   const formData = await request.formData();
   const actionType = formData.get("actionType");
   const sectionId = formData.get("sectionId");
@@ -90,34 +81,69 @@ export const action = async ({ request }) => {
       });
 
       if (section && section.price > 0) {
-        const billingCheck = await billing.check({
-          plans: ["Premium Section"],
-          isTest: true,
+        // Verify they have unlocked this section
+        const hasLicense = await prisma.license.findFirst({
+          where: {
+            shop,
+            type: "section",
+            sectionId: section.id,
+            status: "active",
+          },
         });
 
-        if (!billingCheck.hasActivePayment) {
-          // Trigger Shopify checkout flow for $10 one-time charge
-          return await billing.request({
-            plan: "Premium Section",
-            isTest: true,
-            returnUrl: `https://${session.shop}/admin/apps/craftarchitech-sections-1/app/library?installed_section_id=${sectionId}`,
-          });
+        if (!hasLicense) {
+          return Response.json({ success: false, error: "Please activate this premium section with a valid license key first." });
         }
       }
 
       await installSection(session, sectionId);
-      return { success: true, message: "Section installed successfully!" };
-    } else if (actionType === "update") {
-      await updateSection(session, installationId);
-      return { success: true, message: "Section updated to latest version!" };
-    } else if (actionType === "uninstall") {
-      await uninstallSection(session, installationId);
-      return { success: true, message: "Section removed from theme." };
+      return Response.json({ success: true, message: "Section installed successfully!" });
     }
-    return { success: false, error: "Invalid action." };
+
+    if (actionType === "activate_section") {
+      const licenseKey = formData.get("licenseKey")?.trim();
+      if (!licenseKey) {
+        return Response.json({ success: false, error: "Please enter a section activation key." });
+      }
+
+      const license = await prisma.license.findUnique({
+        where: { key: licenseKey },
+      });
+
+      if (!license || license.type !== "section" || license.sectionId !== sectionId || license.status !== "active") {
+        return Response.json({ success: false, error: "Invalid license key for this premium section." });
+      }
+
+      if (license.shop && license.shop !== shop) {
+        return Response.json({ success: false, error: "This license key is already used by another store." });
+      }
+
+      // Activate the key
+      await prisma.license.update({
+        where: { id: license.id },
+        data: {
+          shop,
+          activatedAt: new Date(),
+        },
+      });
+
+      return Response.json({ success: true, message: "Section unlocked successfully! You can now install it." });
+    }
+
+    if (actionType === "update") {
+      await updateSection(session, installationId);
+      return Response.json({ success: true, message: "Section updated to latest version!" });
+    }
+
+    if (actionType === "uninstall") {
+      await uninstallSection(session, installationId);
+      return Response.json({ success: true, message: "Section removed from theme." });
+    }
+
+    return Response.json({ success: false, error: "Invalid action." });
   } catch (error) {
     console.error("Action error:", error);
-    return { success: false, error: error.message };
+    return Response.json({ success: false, error: error.message });
   }
 };
 
@@ -159,6 +185,13 @@ export default function SectionsLibrary() {
   const handleInstall = (sectionId) => {
     fetcher.submit(
       { actionType: "install", sectionId },
+      { method: "POST" }
+    );
+  };
+
+  const handleActivate = (sectionId, licenseKey) => {
+    fetcher.submit(
+      { actionType: "activate_section", sectionId, licenseKey },
       { method: "POST" }
     );
   };
@@ -298,7 +331,9 @@ export default function SectionsLibrary() {
                     isInstalled={isInstalled}
                     hasUpdate={hasUpdate}
                     installedVersion={inst?.installedVersion}
+                    isUnlocked={section.isUnlocked}
                     onInstall={() => handleInstall(section.id)}
+                    onActivate={(licenseKey) => handleActivate(section.id, licenseKey)}
                     onUpdate={() => handleUpdate(inst.id)}
                     onUninstall={() => handleUninstall(inst.id)}
                     onPreview={() => handlePreview(section)}
