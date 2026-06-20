@@ -59,12 +59,13 @@ export async function installSection(session, sectionId) {
   // Install file templates into the active theme
   console.log(`Writing theme files for section: ${section.handle} in theme ${themeId}`);
   
-  // 1. Write the Liquid Section file
+  // 1. Write the Liquid Section file (protected with license checking wrapper)
+  const protectedLiquid = injectLicenseProtection(latestVersionObj.liquidCode);
   await createThemeAsset(
     session,
     themeId,
     `sections/${section.handle}.liquid`,
-    latestVersionObj.liquidCode
+    protectedLiquid
   );
 
   // 2. Write the CSS Asset file if code exists
@@ -147,12 +148,13 @@ export async function updateSection(session, installationId) {
 
   const themeId = installation.themeId;
 
-  // Re-write updated asset files
+  // Re-write updated asset files (protected with license checking wrapper)
+  const protectedLiquid = injectLicenseProtection(latestVersionObj.liquidCode);
   await createThemeAsset(
     session,
     themeId,
     `sections/${installation.section.handle}.liquid`,
-    latestVersionObj.liquidCode
+    protectedLiquid
   );
 
   if (latestVersionObj.cssCode && latestVersionObj.cssCode.trim() !== "") {
@@ -233,4 +235,86 @@ export async function uninstallSection(session, installationId) {
   });
 
   return true;
+}
+
+/**
+ * Wraps Liquid sections code in a license validation script and injects the license_key setting into the schema.
+ * @param {string} liquidCode - The raw liquid template code
+ * @returns {string} The license-protected liquid code
+ */
+function injectLicenseProtection(liquidCode) {
+  // 1. Find the {% schema %} block
+  const schemaStartIndex = liquidCode.indexOf("{% schema %}");
+  const schemaEndIndex = liquidCode.indexOf("{% endschema %}");
+
+  if (schemaStartIndex === -1 || schemaEndIndex === -1) {
+    return liquidCode; // If no schema, return original
+  }
+
+  const beforeSchema = liquidCode.substring(0, schemaStartIndex);
+  const schemaContent = liquidCode.substring(schemaStartIndex + 12, schemaEndIndex);
+  const afterSchema = liquidCode.substring(schemaEndIndex + 14);
+
+  // 2. Wrap beforeSchema in protection wrapper
+  const wrappedLiquid = `
+<div id="ca-section-{{ section.id }}" class="ca-section-wrapper" style="display: none;">
+  ${beforeSchema}
+</div>
+<div id="ca-license-error-{{ section.id }}" class="ca-license-error" style="display: none; padding: 30px; text-align: center; border: 2px dashed #f43f5e; color: #e11d48; background: #fff1f2; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 20px auto; max-width: 600px;">
+  <p style="margin: 0 0 10px; font-size: 16px; font-weight: bold;">⚠️ License Verification Required</p>
+  <p style="margin: 0; font-size: 14px; opacity: 0.9;">Invalid, missing, or unregistered License Key for this storefront. Please enter your valid license key in the section settings in your Theme Editor.</p>
+</div>
+
+<script>
+  (function() {
+    const shop = "{{ shop.permanent_domain }}";
+    const key = "{{ section.settings.license_key }}";
+    const sectionId = "{{ section.id }}";
+    
+    if (!key || key.trim() === "") {
+      document.getElementById("ca-license-error-" + sectionId).style.display = "block";
+      return;
+    }
+    
+    fetch("https://craftarchitech-sections.onrender.com/api/validate-license?shop=" + encodeURIComponent(shop) + "&key=" + encodeURIComponent(key))
+      .then(res => res.json())
+      .then(data => {
+        if (data.valid) {
+          document.getElementById("ca-section-" + sectionId).style.display = "block";
+        } else {
+          document.getElementById("ca-license-error-" + sectionId).style.display = "block";
+        }
+      })
+      .catch(err => {
+        console.error("License check failed:", err);
+        document.getElementById("ca-license-error-" + sectionId).style.display = "block";
+      });
+  })();
+</script>
+`;
+
+  // 3. Inject license_key setting into the schema settings array
+  try {
+    const schemaObj = JSON.parse(schemaContent.trim());
+    if (!schemaObj.settings) {
+      schemaObj.settings = [];
+    }
+    
+    // Check if license_key setting already exists
+    const hasLicenseKey = schemaObj.settings.some(s => s.id === "license_key");
+    if (!hasLicenseKey) {
+      schemaObj.settings.push({
+        type: "text",
+        id: "license_key",
+        label: "CraftArchitech License Key",
+        default: ""
+      });
+    }
+
+    const newSchemaContent = JSON.stringify(schemaObj, null, 2);
+    return `${wrappedLiquid}\n{% schema %}\n${newSchemaContent}\n{% endschema %}\n${afterSchema}`;
+  } catch (error) {
+    console.error("Failed to parse and inject license settings into schema:", error);
+    return liquidCode; // Return original if parsing fails
+  }
 }

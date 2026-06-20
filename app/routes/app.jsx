@@ -5,10 +5,37 @@ import { AppProvider as PolarisProvider, Banner } from "@shopify/polaris";
 import "@shopify/polaris/build/esm/styles.css";
 import { authenticate } from "../shopify.server";
 import { isAppEmbedEnabled } from "../services/theme.server";
+import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
+
+  // Check and generate license key for the merchant if missing
+  let merchant = await prisma.merchant.findUnique({
+    where: { shop },
+  });
+
+  const generateRandomLicenseKey = () => {
+    return `CRAFT-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  };
+
+  if (!merchant) {
+    merchant = await prisma.merchant.create({
+      data: {
+        shop,
+        licenseKey: generateRandomLicenseKey(),
+        autoUpdate: false,
+      },
+    });
+  } else if (!merchant.licenseKey) {
+    merchant = await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        licenseKey: generateRandomLicenseKey(),
+      },
+    });
+  }
 
   const appEmbedEnabled = await isAppEmbedEnabled(session);
   

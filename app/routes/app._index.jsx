@@ -25,13 +25,33 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { seedSections } from "../services/sections.server";
+import { useAppBridge } from "@shopify/app-bridge-react";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, billing } = await authenticate.admin(request);
   const shop = session.shop;
+
+  // Check if user has active charge for One-time Activation
+  const billingCheck = await billing.check({
+    plans: ["One-time Activation"],
+    isTest: true,
+  });
+  
+  if (!billingCheck.hasActivePayment) {
+    return await billing.request({
+      plan: "One-time Activation",
+      isTest: true,
+      returnUrl: `https://${session.shop}/admin/apps/craftarchitech-sections-1/app`,
+    });
+  }
 
   // Auto-seed the library sections on load to guarantee library data exists
   await seedSections();
+
+  const merchant = await prisma.merchant.findUnique({
+    where: { shop },
+  });
+  const licenseKey = merchant?.licenseKey || "Not Activated";
 
   // Aggregate stats
   const totalInstalled = await prisma.installation.count({
@@ -86,6 +106,7 @@ export const loader = async ({ request }) => {
 
   return {
     shop,
+    licenseKey,
     totalInstalled,
     activeInstalled,
     totalLibrary,
@@ -103,16 +124,45 @@ export const loader = async ({ request }) => {
 
 export default function Dashboard() {
   const {
+    licenseKey,
     totalInstalled,
     activeInstalled,
     totalLibrary,
     updatesAvailable,
     recentInstalls,
   } = useLoaderData();
+  const shopify = useAppBridge();
 
   return (
     <Page title="CraftArchitech Dashboard">
       <BlockStack gap="500">
+        {/* License Key Info */}
+        <Card>
+          <BlockStack gap="300">
+            <BlockStack gap="100">
+              <Text variant="headingMd" as="h3">
+                Your Active License Key
+              </Text>
+              <Text variant="bodyMd" tone="subdued">
+                Copy this key and paste it into the "CraftArchitech License Key" setting in your Theme Customizer to activate your premium sections.
+              </Text>
+            </BlockStack>
+            <Box padding="300" background="bg-surface-secondary" borderRadius="200" borderStyle="dashed" borderWidth="025" borderColor="border">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text variant="bodyLg" fontWeight="bold" tone="success">
+                  {licenseKey}
+                </Text>
+                <Button onClick={() => {
+                  navigator.clipboard.writeText(licenseKey);
+                  shopify.toast.show("License key copied to clipboard!");
+                }}>
+                  Copy Key
+                </Button>
+              </InlineStack>
+            </Box>
+          </BlockStack>
+        </Card>
+
         {/* Metric Cards Grid */}
         <Grid>
           <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3 }}>
