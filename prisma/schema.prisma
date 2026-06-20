@@ -34,13 +34,14 @@ model Session {
 }
 
 model Merchant {
-  id           String         @id @default(uuid())
-  shop         String         @unique
-  licenseKey   String?
-  autoUpdate   Boolean        @default(false)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  installations Installation[]
+  id                String         @id @default(uuid())
+  shop              String         @unique
+  licenseKey        String?
+  customAccessToken String?
+  autoUpdate        Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  installations     Installation[]
 }
 
 model Section {

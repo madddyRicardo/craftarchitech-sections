@@ -26,6 +26,7 @@ export const loader = async ({ request }) => {
 
   return {
     licenseKey: merchant.licenseKey || "",
+    customAccessToken: merchant.customAccessToken || "",
     autoUpdate: merchant.autoUpdate,
   };
 };
@@ -36,6 +37,7 @@ export const action = async ({ request }) => {
 
   const formData = await request.formData();
   const licenseKey = formData.get("licenseKey");
+  const customAccessToken = formData.get("customAccessToken");
   const autoUpdate = formData.get("autoUpdate") === "true";
 
   try {
@@ -43,6 +45,7 @@ export const action = async ({ request }) => {
       where: { shop },
       data: {
         licenseKey,
+        customAccessToken,
         autoUpdate,
       },
     });
@@ -61,6 +64,7 @@ export default function Settings() {
   const shopify = useAppBridge();
 
   const [licenseKey, setLicenseKey] = useState(initialSettings.licenseKey);
+  const [customAccessToken, setCustomAccessToken] = useState(initialSettings.customAccessToken);
   const [autoUpdate, setAutoUpdate] = useState(initialSettings.autoUpdate);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -68,13 +72,14 @@ export default function Settings() {
     // Check if state changed from loader data to enable Save button
     if (
       licenseKey !== initialSettings.licenseKey ||
+      customAccessToken !== initialSettings.customAccessToken ||
       autoUpdate !== initialSettings.autoUpdate
     ) {
       setHasChanges(true);
     } else {
       setHasChanges(false);
     }
-  }, [licenseKey, autoUpdate, initialSettings]);
+  }, [licenseKey, customAccessToken, autoUpdate, initialSettings]);
 
   useEffect(() => {
     if (actionData) {
@@ -91,6 +96,7 @@ export default function Settings() {
     submit(
       {
         licenseKey,
+        customAccessToken,
         autoUpdate: String(autoUpdate),
       },
       { method: "POST" }
@@ -125,6 +131,34 @@ export default function Settings() {
               </BlockStack>
             </Card>
 
+            {/* Custom App / Theme Access Credentials Card */}
+            <Card roundedAbove="sm">
+              <BlockStack gap="300">
+                <Text variant="headingMd" as="h3">
+                  Shopify API Theme Write Override
+                </Text>
+                <Text variant="bodyMd" tone="subdued">
+                  Shopify restricts public Partner Apps from creating or modifying theme code files (Asset API) unless granted a manual App Store exemption.
+                </Text>
+                <Banner tone="info" title="Bypass theme file write restrictions">
+                  To automatically install liquid sections directly into your theme, you can input a <strong>Custom App Admin API Access Token</strong> or <strong>Theme Access Password</strong>. Custom tokens have unrestricted access to write theme files.
+                </Banner>
+                <TextField
+                  label="Theme Write Custom Access Token / Password"
+                  value={customAccessToken}
+                  onChange={setCustomAccessToken}
+                  placeholder="shpat_xxx... or theme password"
+                  autoComplete="off"
+                  type="password"
+                  helpText={
+                    <span>
+                      How to get this: Create a Custom App in your Shopify Admin (<em>Settings &gt; Develop Apps &gt; Create an app &gt; Configure Admin API Integration &gt; Select 'write_themes' and 'read_themes' &gt; Install app</em>) and copy the Admin API access token.
+                    </span>
+                  }
+                />
+              </BlockStack>
+            </Card>
+
             {/* Updates Settings Card */}
             <Card roundedAbove="sm">
               <BlockStack gap="300">
@@ -147,6 +181,7 @@ export default function Settings() {
                 disabled={!hasChanges}
                 onClick={() => {
                   setLicenseKey(initialSettings.licenseKey);
+                  setCustomAccessToken(initialSettings.customAccessToken);
                   setAutoUpdate(initialSettings.autoUpdate);
                 }}
               >

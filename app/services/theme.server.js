@@ -1,6 +1,7 @@
 /**
  * Theme Service for communicating with Shopify Theme Files API (Asset API)
  */
+import prisma from "../db.server";
 
 const API_VERSION = "2026-04";
 
@@ -10,6 +11,24 @@ const embedStatusCache = new Map(); // key: shop, value: { enabled: boolean, exp
 
 const THEME_ID_TTL = 5 * 60 * 1000; // 5 minutes
 const EMBED_STATUS_TTL = 15 * 1000; // 15 seconds
+
+/**
+ * Helper to fetch the correct access token (supporting Custom App API Token / Theme Password override)
+ */
+async function getAccessToken(session) {
+  try {
+    const merchant = await prisma.merchant.findUnique({
+      where: { shop: session.shop },
+    });
+    if (merchant && merchant.customAccessToken) {
+      console.log(`[Theme API] Using custom API token override for ${session.shop}`);
+      return merchant.customAccessToken;
+    }
+  } catch (error) {
+    console.error("[Theme API] Error loading merchant token override:", error);
+  }
+  return session.accessToken;
+}
 
 /**
  * Get the active theme ID for a shop
@@ -25,13 +44,14 @@ export async function getActiveThemeId(session) {
   }
 
   const url = `https://${session.shop}/admin/api/${API_VERSION}/themes.json`;
+  const token = await getAccessToken(session);
   
-  console.log(`[Theme API] Fetching themes for shop: ${session.shop} using scopes: ${session.scope}`);
+  console.log(`[Theme API] Fetching themes for shop: ${session.shop}`);
   
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "X-Shopify-Access-Token": session.accessToken,
+      "X-Shopify-Access-Token": token,
       "Content-Type": "application/json",
     },
   });
@@ -70,13 +90,14 @@ export async function getActiveThemeId(session) {
  */
 export async function createThemeAsset(session, themeId, key, value) {
   const url = `https://${session.shop}/admin/api/${API_VERSION}/themes/${themeId}/assets.json`;
+  const token = await getAccessToken(session);
   
   console.log(`[Theme API] Writing asset to: ${url} with key: ${key}`);
   
   const response = await fetch(url, {
     method: "PUT",
     headers: {
-      "X-Shopify-Access-Token": session.accessToken,
+      "X-Shopify-Access-Token": token,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -106,13 +127,14 @@ export async function createThemeAsset(session, themeId, key, value) {
  */
 export async function deleteThemeAsset(session, themeId, key) {
   const url = `https://${session.shop}/admin/api/${API_VERSION}/themes/${themeId}/assets.json?asset[key]=${key}`;
+  const token = await getAccessToken(session);
   
   console.log(`[Theme API] Deleting asset at: ${url}`);
   
   const response = await fetch(url, {
     method: "DELETE",
     headers: {
-      "X-Shopify-Access-Token": session.accessToken,
+      "X-Shopify-Access-Token": token,
       "Content-Type": "application/json",
     },
   });
@@ -142,11 +164,12 @@ export async function isAppEmbedEnabled(session) {
   try {
     const themeId = await getActiveThemeId(session);
     const url = `https://${session.shop}/admin/api/${API_VERSION}/themes/${themeId}/assets.json?asset[key]=config/settings_data.json`;
+    const token = await getAccessToken(session);
     
     const response = await fetch(url, {
       method: "GET",
       headers: {
-        "X-Shopify-Access-Token": session.accessToken,
+        "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
       },
     });
