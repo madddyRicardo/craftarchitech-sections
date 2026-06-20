@@ -107,3 +107,48 @@ export async function deleteThemeAsset(session, themeId, key) {
   console.log(`[Theme API] Successfully deleted asset: ${key}`);
   return await response.json();
 }
+
+/**
+ * Check if the theme app embed is active in the current main theme
+ * @param {Object} session - The authenticated Shopify session
+ * @returns {Promise<boolean>} - True if enabled, false if disabled or not found
+ */
+export async function isAppEmbedEnabled(session) {
+  try {
+    const themeId = await getActiveThemeId(session);
+    const url = `https://${session.shop}/admin/api/${API_VERSION}/themes/${themeId}/assets.json?asset[key]=config/settings_data.json`;
+    
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-Shopify-Access-Token": session.accessToken,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`[Theme API] Failed to fetch settings_data.json: status=${response.status}`);
+      return false;
+    }
+
+    const data = await response.json();
+    if (!data.asset || !data.asset.value) {
+      return false;
+    }
+
+    const settings = JSON.parse(data.asset.value);
+    const blocks = settings.current?.blocks || {};
+    
+    // Look for a block with our app embed type and check if it is NOT disabled
+    for (const block of Object.values(blocks)) {
+      if (block.type && block.type.includes("shopify://apps/") && block.type.includes("/blocks/app-embed")) {
+        return block.disabled === false;
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.error("[Theme API] Error checking app embed status:", error);
+    return false;
+  }
+}

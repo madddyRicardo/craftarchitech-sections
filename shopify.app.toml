@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "4f8b3ede16a104c119baaf3a5946cad5"
-application_url = "https://example.com"
+application_url = "https://craftarchitech-sections.onrender.com"
 embedded = true
 name = "craftarchitech sections"
 
@@ -45,8 +45,10 @@ api_version = "2026-07"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://craftarchitech-sections.onrender.com/auth/callback",
+  "https://craftarchitech-sections.onrender.com/auth/shopify/callback"
+]
 
 [build]
-include_config_on_deploy = true
 automatically_update_urls_on_dev = true

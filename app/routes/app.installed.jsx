@@ -16,10 +16,13 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { updateSection, uninstallSection } from "../services/installer.server";
+import { isAppEmbedEnabled } from "../services/theme.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
+
+  const appEmbedEnabled = await isAppEmbedEnabled(session);
 
   const installations = await prisma.installation.findMany({
     where: { shop },
@@ -37,6 +40,7 @@ export const loader = async ({ request }) => {
 
   return {
     shop,
+    appEmbedEnabled,
     installations: installations.map((inst) => {
       const latestVersion = inst.section.versions[0]?.versionNumber || "1.0.0";
       return {
@@ -76,7 +80,7 @@ export const action = async ({ request }) => {
 };
 
 export default function InstalledSections() {
-  const { shop, installations } = useLoaderData();
+  const { shop, installations, appEmbedEnabled } = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
 
@@ -114,19 +118,21 @@ export default function InstalledSections() {
   return (
     <Page title="Installed Sections">
       <BlockStack gap="400">
-        <Banner
-          title="Enable CraftArchitech Sections App Embed"
-          action={{
-            content: "Enable in Theme Editor",
-            url: `https://${shop}/admin/themes/current/editor?context=apps`,
-            external: true,
-          }}
-          tone="warning"
-        >
-          <p>
-            To ensure all installed sections display and function correctly on your storefront, please verify that our App Embed is enabled in your active theme editor.
-          </p>
-        </Banner>
+        {!appEmbedEnabled && (
+          <Banner
+            title="Enable CraftArchitech Sections App Embed"
+            action={{
+              content: "Enable in Theme Editor",
+              url: `https://${shop}/admin/themes/current/editor?context=apps`,
+              external: true,
+            }}
+            tone="warning"
+          >
+            <p>
+              To ensure all installed sections display and function correctly on your storefront, please verify that our App Embed is enabled in your active theme editor.
+            </p>
+          </Banner>
+        )}
 
         {installations.length === 0 ? (
           <Card>
