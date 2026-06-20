@@ -25,6 +25,11 @@ const shopify = shopifyApp({
       amount: 29.00,
       currencyCode: "USD",
       interval: BillingInterval.OneTime,
+    },
+    "Premium Section": {
+      amount: 10.00,
+      currencyCode: "USD",
+      interval: BillingInterval.OneTime,
     }
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN

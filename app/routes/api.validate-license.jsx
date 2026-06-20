@@ -1,4 +1,3 @@
-import { json } from "react-router";
 import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
@@ -13,7 +12,7 @@ export const loader = async ({ request }) => {
   };
 
   if (!shop || !key) {
-    return json({ valid: false, reason: "Missing parameters" }, {
+    return Response.json({ valid: false, reason: "Missing parameters" }, {
       headers: corsHeaders
     });
   }
@@ -33,24 +32,24 @@ export const loader = async ({ request }) => {
     });
 
     if (merchant && merchant.licenseKey && merchant.licenseKey.trim() === key.trim()) {
-      return json({ valid: true }, {
+      return Response.json({ valid: true }, {
         headers: corsHeaders
       });
     }
 
-    return json({ valid: false, reason: "Invalid license key or unregistered store" }, {
+    return Response.json({ valid: false, reason: "Invalid license key or unregistered store" }, {
       headers: corsHeaders
     });
   } catch (error) {
     console.error("License validation error:", error);
-    return json({ valid: false, error: error.message }, {
+    return Response.json({ valid: false, error: error.message }, {
       headers: corsHeaders
     });
   }
 };
 
 export const action = async () => {
-  return json({}, {
+  return Response.json({}, {
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, redirect } from "react-router";
 import {
   Page,
   Layout,
@@ -22,7 +22,7 @@ import SectionCard from "../components/SectionCard";
 import PreviewModal from "../components/PreviewModal";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, billing } = await authenticate.admin(request);
   const shop = session.shop;
 
   // Retrieve the library sections and installed logs
@@ -30,6 +30,38 @@ export const loader = async ({ request }) => {
   const installations = await prisma.installation.findMany({
     where: { shop },
   });
+
+  // Check for auto-installation redirect from Shopify Billing
+  const url = new URL(request.url);
+  const installedSectionId = url.searchParams.get("installed_section_id");
+
+  if (installedSectionId) {
+    const section = await prisma.section.findUnique({
+      where: { id: installedSectionId },
+    });
+
+    if (section) {
+      let canInstall = true;
+      if (section.price > 0) {
+        const billingCheck = await billing.check({
+          plans: ["Premium Section"],
+          isTest: true,
+        });
+        canInstall = billingCheck.hasActivePayment;
+      }
+
+      if (canInstall) {
+        try {
+          await installSection(session, installedSectionId);
+          return redirect(`/app/library?installed_success=true`);
+        } catch (e) {
+          console.error("Auto install error:", e);
+        }
+      }
+    }
+  }
+
+  const installedSuccess = url.searchParams.get("installed_success") === "true";
 
   return {
     shop,
@@ -40,11 +72,12 @@ export const loader = async ({ request }) => {
       installedVersion: inst.installedVersion,
       themeId: inst.themeId,
     })),
+    installedSuccess,
   };
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, billing } = await authenticate.admin(request);
   const formData = await request.formData();
   const actionType = formData.get("actionType");
   const sectionId = formData.get("sectionId");
@@ -52,6 +85,26 @@ export const action = async ({ request }) => {
 
   try {
     if (actionType === "install") {
+      const section = await prisma.section.findUnique({
+        where: { id: sectionId },
+      });
+
+      if (section && section.price > 0) {
+        const billingCheck = await billing.check({
+          plans: ["Premium Section"],
+          isTest: true,
+        });
+
+        if (!billingCheck.hasActivePayment) {
+          // Trigger Shopify checkout flow for $10 one-time charge
+          return await billing.request({
+            plan: "Premium Section",
+            isTest: true,
+            returnUrl: `https://${session.shop}/admin/apps/craftarchitech-sections-1/app/library?installed_section_id=${sectionId}`,
+          });
+        }
+      }
+
       await installSection(session, sectionId);
       return { success: true, message: "Section installed successfully!" };
     } else if (actionType === "update") {
@@ -69,7 +122,7 @@ export const action = async ({ request }) => {
 };
 
 export default function SectionsLibrary() {
-  const { shop, librarySections, installations } = useLoaderData();
+  const { shop, librarySections, installations, installedSuccess } = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
 
@@ -92,6 +145,16 @@ export default function SectionsLibrary() {
       }
     }
   }, [fetcher.data, shopify]);
+
+  // Show success toast on redirect back from checkout
+  useEffect(() => {
+    if (installedSuccess) {
+      shopify.toast.show("Premium section installed successfully!");
+      // Clean query parameter from address bar
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  }, [installedSuccess, shopify]);
 
   const handleInstall = (sectionId) => {
     fetcher.submit(

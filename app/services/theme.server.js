@@ -168,7 +168,7 @@ export async function isAppEmbedEnabled(session) {
     // Look for a block with our app embed type and check if it is NOT disabled
     for (const block of Object.values(blocks)) {
       if (block.type && block.type.includes("shopify://apps/") && block.type.includes("/blocks/app-embed")) {
-        enabled = block.disabled === false;
+        enabled = block.disabled !== true;
         break;
       }
     }

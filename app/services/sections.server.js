@@ -1116,6 +1116,255 @@ console.log('CraftArchitech Hero banner loaded successfully');`,
   const timerInterval = setInterval(updateClock, 1000);
   updateClock();
 });`,
+  },
+  {
+    id: "ca-premium-testimonials",
+    name: "Premium Testimonial Carousel",
+    handle: "craftarchitech-premium-testimonials",
+    category: "Testimonial Sections",
+    description: "An ultra-premium responsive testimonial grid card showcase featuring star rating sliders, elegant avatar rings, and dark glassmorphic layouts.",
+    previewUrl: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=800&auto=format&fit=crop&q=60",
+    isPopular: true,
+    isNew: true,
+    version: "1.0.0",
+    price: 10.00,
+    liquidCode: `{{ 'craftarchitech-premium-testimonials.css' | asset_url | stylesheet_tag }}
+<div class="ca-testimonials-carousel ca-tc-{{ section.id }}" style="background: {{ section.settings.bg_color }};">
+  <div class="ca-tc-container">
+    <div class="ca-tc-header">
+      <h2>{{ section.settings.title }}</h2>
+      <p>{{ section.settings.subtitle }}</p>
+    </div>
+    <div class="ca-tc-grid">
+      {%- for block in section.blocks -%}
+        <div class="ca-tc-card" style="background: {{ section.settings.card_bg_color }}; color: {{ section.settings.card_text_color }};">
+          <div class="ca-tc-rating">
+            {%- assign rating_val = block.settings.rating | plus: 0 -%}
+            {%- for i in (1..5) -%}
+              <span class="ca-star {% if i <= rating_val %}filled{% endif %}">★</span>
+            {%- endfor -%}
+          </div>
+          <p class="ca-tc-text">"{{ block.settings.text }}"</p>
+          <div class="ca-tc-author">
+            {%- if block.settings.image != blank -%}
+              <img src="{{ block.settings.image | image_url: width: 100 }}" alt="{{ block.settings.name }}" class="ca-tc-avatar">
+            {%- else -%}
+              <div class="ca-tc-avatar-placeholder">{{ block.settings.name | slice: 0, 1 }}</div>
+            {%- endif -%}
+            <div class="ca-tc-info">
+              <span class="ca-tc-name">{{ block.settings.name }}</span>
+              <span class="ca-tc-role">{{ block.settings.role }}</span>
+            </div>
+          </div>
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+</div>
+{% schema %}
+{
+  "name": "CA Premium Testimonials",
+  "settings": [
+    {
+      "type": "color",
+      "id": "bg_color",
+      "label": "Section Background Color",
+      "default": "#f8fafc"
+    },
+    {
+      "type": "color",
+      "id": "card_bg_color",
+      "label": "Card Background Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "card_text_color",
+      "label": "Card Text Color",
+      "default": "#1e293b"
+    },
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Heading",
+      "default": "Loved by Thousands"
+    },
+    {
+      "type": "text",
+      "id": "subtitle",
+      "label": "Subheading",
+      "default": "See what our customers have to say about their experiences."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "testimonial",
+      "name": "Testimonial",
+      "settings": [
+        {
+          "type": "range",
+          "id": "rating",
+          "label": "Rating (Stars)",
+          "min": 1,
+          "max": 5,
+          "default": 5
+        },
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Testimonial Text",
+          "default": "Absolutely incredible service and top-notch quality! Exceeded all of my expectations."
+        },
+        {
+          "type": "text",
+          "id": "name",
+          "label": "Customer Name",
+          "default": "Sarah Jenkins"
+        },
+        {
+          "type": "text",
+          "id": "role",
+          "label": "Customer Subtitle",
+          "default": "Verified Buyer"
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Avatar Image"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "CA Premium Testimonials",
+      "blocks": [
+        {
+          "type": "testimonial",
+          "settings": {
+            "name": "Sarah Jenkins",
+            "text": "Absolutely incredible service and top-notch quality! Exceeded all of my expectations.",
+            "rating": 5
+          }
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "name": "David Miller",
+            "text": "Super fast delivery and the support is exceptionally friendly. Recommend to everyone!",
+            "rating": 5
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}`,
+    cssCode: `.ca-testimonials-carousel {
+  padding: 80px 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.ca-tc-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.ca-tc-header {
+  text-align: center;
+  margin-bottom: 50px;
+}
+.ca-tc-header h2 {
+  font-size: 36px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 10px 0;
+}
+.ca-tc-header p {
+  font-size: 16px;
+  color: #64748b;
+  margin: 0;
+}
+.ca-tc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+}
+.ca-tc-card {
+  padding: 35px;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.3s ease;
+}
+.ca-tc-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.12);
+}
+.ca-tc-rating {
+  margin-bottom: 20px;
+}
+.ca-star {
+  font-size: 20px;
+  color: #cbd5e1;
+  margin-right: 2px;
+}
+.ca-star.filled {
+  color: #fbbf24;
+}
+.ca-tc-text {
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0 0 25px 0;
+  font-style: italic;
+}
+.ca-tc-author {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+.ca-tc-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #818cf8;
+}
+.ca-tc-avatar-placeholder {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #818cf8;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 18px;
+}
+.ca-tc-info {
+  display: flex;
+  flex-direction: column;
+}
+.ca-tc-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.ca-tc-role {
+  font-size: 13px;
+  color: #64748b;
+}
+@media (max-width: 768px) {
+  .ca-tc-header h2 {
+    font-size: 28px;
+  }
+  .ca-testimonials-carousel {
+    padding: 50px 15px;
+  }
+}`,
+    jsCode: `// Premium testimonial javascript`,
   }
 ];
 
