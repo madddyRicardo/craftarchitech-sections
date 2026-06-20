@@ -16,7 +16,6 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { isAppEmbedEnabled } from "../services/theme.server";
 import { getSectionsList } from "../services/sections.server";
 import { installSection, updateSection, uninstallSection } from "../services/installer.server";
 import SectionCard from "../components/SectionCard";
@@ -26,8 +25,6 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const appEmbedEnabled = await isAppEmbedEnabled(session);
-
   // Retrieve the library sections and installed logs
   const librarySections = await getSectionsList();
   const installations = await prisma.installation.findMany({
@@ -36,7 +33,6 @@ export const loader = async ({ request }) => {
 
   return {
     shop,
-    appEmbedEnabled,
     librarySections,
     installations: installations.map((inst) => ({
       id: inst.id,
@@ -73,7 +69,7 @@ export const action = async ({ request }) => {
 };
 
 export default function SectionsLibrary() {
-  const { shop, librarySections, installations, appEmbedEnabled } = useLoaderData();
+  const { shop, librarySections, installations } = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
 
@@ -179,22 +175,6 @@ export default function SectionsLibrary() {
   return (
     <Page title="Sections Library">
       <BlockStack gap="400">
-        {!appEmbedEnabled && (
-          <Banner
-            title="Enable CraftArchitech Sections App Embed"
-            action={{
-              content: "Enable in Theme Editor",
-              url: `https://${shop}/admin/themes/current/editor?context=apps`,
-              external: true,
-            }}
-            tone="warning"
-          >
-            <p>
-              Before installing sections, please ensure our App Embed is enabled in your active theme editor to allow custom section styles and interactions to load on your storefront.
-            </p>
-          </Banner>
-        )}
-
         {/* Filters Card */}
         <Box padding="400" background="bg-surface" borderRadius="200" borderStyle="solid" borderWidth="025" borderColor="border">
           <Grid>

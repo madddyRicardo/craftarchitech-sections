@@ -1,12 +1,16 @@
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { AppProvider as PolarisProvider } from "@shopify/polaris";
+import { AppProvider as PolarisProvider, Banner } from "@shopify/polaris";
 import "@shopify/polaris/build/esm/styles.css";
 import { authenticate } from "../shopify.server";
+import { isAppEmbedEnabled } from "../services/theme.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+
+  const appEmbedEnabled = await isAppEmbedEnabled(session);
   
   // Only display Super Admin option if it is our own admin/dev shop
   const isSuperAdmin = 
@@ -18,11 +22,13 @@ export const loader = async ({ request }) => {
   return { 
     apiKey: process.env.SHOPIFY_API_KEY || "",
     isSuperAdmin,
+    shop,
+    appEmbedEnabled,
   };
 };
 
 export default function App() {
-  const { apiKey, isSuperAdmin } = useLoaderData();
+  const { apiKey, isSuperAdmin, shop, appEmbedEnabled } = useLoaderData();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -34,6 +40,23 @@ export default function App() {
           <s-link href="/app/settings">Settings</s-link>
           {isSuperAdmin && <s-link href="/app/super-admin">Super Admin</s-link>}
         </s-app-nav>
+        {!appEmbedEnabled && (
+          <div style={{ padding: "16px 20px 0" }}>
+            <Banner
+              title="Enable CraftArchitech Sections App Embed"
+              action={{
+                content: "Enable in Theme Editor",
+                url: `https://${shop}/admin/themes/current/editor?context=apps`,
+                external: true,
+              }}
+              tone="warning"
+            >
+              <p>
+                To ensure all installed sections display and function correctly on your storefront, please verify that our App Embed is enabled in your active theme editor.
+              </p>
+            </Banner>
+          </div>
+        )}
         <Outlet />
       </PolarisProvider>
     </AppProvider>
