@@ -13,7 +13,7 @@ RUN npm ci && npm cache clean --force
 
 COPY . .
 
-RUN npx prisma generate
+RUN DATABASE_URL="file:./dev.sqlite" npx prisma generate
 
 RUN npm run build
 
